@@ -1,0 +1,141 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["publisher"]
+}
+
+model User {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String
+  email        String        @unique
+  plan         String        @default("free")
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  publications Publication[]
+
+  @@map("users")
+  @@schema("publisher")
+}
+
+model Publication {
+  id               String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String               @map("user_id") @db.Uuid
+  title            String
+  description      String?
+  slug             String               @unique
+  accessType       String               @default("public") @map("access_type")
+  currentVersionId String?              @map("current_version_id") @db.Uuid
+  showBranding     Boolean              @default(true) @map("show_branding")
+  expiresAt        DateTime?            @map("expires_at") @db.Timestamptz(6)
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentVersion   PublicationVersion?  @relation("CurrentVersion", fields: [currentVersionId], references: [id])
+  versions         PublicationVersion[] @relation("AllVersions")
+  viewers          PublicationViewer[]
+  viewerSessions   ViewerSession[]
+  authCodes        AuthCode[]
+  analyticsEvents  AnalyticsEvent[]
+
+  @@map("publications")
+  @@schema("publisher")
+}
+
+model PublicationVersion {
+  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  publicationId      String             @map("publication_id") @db.Uuid
+  versionNumber      Int                @map("version_number")
+  entryPointPath     String             @default("index.html") @map("entry_point_path")
+  storagePrefix      String             @map("storage_prefix")
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  publication        Publication        @relation("AllVersions", fields: [publicationId], references: [id], onDelete: Cascade)
+  currentForPubs     Publication[]      @relation("CurrentVersion")
+  assets             PublicationAsset[]
+  analyticsEvents    AnalyticsEvent[]
+
+  @@map("publication_versions")
+  @@schema("publisher")
+}
+
+model PublicationAsset {
+  id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  versionId   String             @map("version_id") @db.Uuid
+  filePath    String             @map("file_path")
+  storageKey  String             @map("storage_key")
+  mimeType    String             @map("mime_type")
+  fileSize    Int                @map("file_size")
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  version     PublicationVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@map("publication_assets")
+  @@schema("publisher")
+}
+
+model PublicationViewer {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  publicationId String      @map("publication_id") @db.Uuid
+  email         String
+  name          String?
+  addedAt       DateTime    @default(now()) @map("added_at") @db.Timestamptz(6)
+  publication   Publication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+
+  @@map("publication_viewers")
+  @@schema("publisher")
+}
+
+model ViewerSession {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  publicationId    String          @map("publication_id") @db.Uuid
+  viewerEmail      String          @map("viewer_email")
+  sessionTokenHash String          @map("session_token_hash")
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt        DateTime        @default(dbgenerated("(now() + interval '7 days')")) @map("expires_at") @db.Timestamptz(6)
+  lastUsedAt       DateTime?       @map("last_used_at") @db.Timestamptz(6)
+  publication      Publication     @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  analyticsEvents  AnalyticsEvent[]
+
+  @@map("viewer_sessions")
+  @@schema("publisher")
+}
+
+model AuthCode {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type          String
+  email         String
+  publicationId String?      @map("publication_id") @db.Uuid
+  codeHash      String       @map("code_hash")
+  attempts      Int          @default(0)
+  used          Boolean      @default(false)
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt     DateTime     @default(dbgenerated("(now() + interval '15 minutes')")) @map("expires_at") @db.Timestamptz(6)
+  publication   Publication? @relation(fields: [publicationId], references: [id])
+
+  @@map("auth_codes")
+  @@schema("publisher")
+}
+
+model AnalyticsEvent {
+  id              String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  publicationId   String             @map("publication_id") @db.Uuid
+  versionId       String?            @map("version_id") @db.Uuid
+  viewerSessionId String?            @map("viewer_session_id") @db.Uuid
+  viewerEmail     String?            @map("viewer_email")
+  ipAddress       String             @map("ip_address")
+  countryCode     String?            @map("country_code")
+  userAgent       String             @map("user_agent")
+  assetPath       String             @map("asset_path")
+  eventType       String             @map("event_type")
+  durationSeconds Int?               @map("duration_seconds")
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  publication     Publication        @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  version         PublicationVersion? @relation(fields: [versionId], references: [id])
+  viewerSession   ViewerSession?     @relation(fields: [viewerSessionId], references: [id])
+
+  @@map("analytics_events")
+  @@schema("publisher")
+}
