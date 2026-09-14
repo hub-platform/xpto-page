@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { isReservedSlug } from '@/lib/slug'
 import { getViewerSession } from '@/lib/session'
+import { getPublisherSession } from '@/lib/auth'
 import type { Asset } from '@/lib/types'
 
 const VIEWER_AUTH_HTML = (slug: string, publicationId: string, title: string) => `<!DOCTYPE html>
@@ -175,12 +176,16 @@ export async function GET(
 
   // Protected access check
   if (publication.accessType === 'protected') {
-    const session = await getViewerSession(publication.id)
-    if (!session) {
-      return new NextResponse(
-        VIEWER_AUTH_HTML(slug, publication.id, publication.title),
-        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-      )
+    const publisherId = await getPublisherSession()
+    const isOwner = publisherId === publication.userId
+    if (!isOwner) {
+      const session = await getViewerSession(publication.id)
+      if (!session) {
+        return new NextResponse(
+          VIEWER_AUTH_HTML(slug, publication.id, publication.title),
+          { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+        )
+      }
     }
   }
 
