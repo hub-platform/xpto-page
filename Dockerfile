@@ -5,7 +5,7 @@ FROM base AS builder
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --include=dev
 
 COPY prisma ./prisma
 COPY src ./src
